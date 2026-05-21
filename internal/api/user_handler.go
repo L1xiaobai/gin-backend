@@ -70,10 +70,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		Password: req.Password,
 	}
 
-	// Service 层统一处理事务和 Redis 缓存删除
 	if err := h.userService.UpdateUser(ctx, user); err != nil {
-        response.Fail(c, code.InternalError, err.Error())
-        return
+		response.Error(c, err)
+		return
 	}
 
 	response.Success(c, nil)
@@ -89,7 +88,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 
 	users, err := h.userService.ListUsers(c.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
-		response.Fail(c, code.InternalError, "获取用户列表失败")
+		response.Error(c, err)
 		return
 	}
 
@@ -108,7 +107,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	}
 
 	if err := h.userService.DeleteUser(c.Request.Context(), req.ID); err != nil {
-		response.Fail(c, code.InternalError, "删除用户失败")
+		response.Error(c, err)
 		return
 	}
 

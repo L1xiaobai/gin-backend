@@ -29,3 +29,19 @@ func FailData(code int, msg string) Response {
 		Msg:  msg,
 	}
 }
+
+func Error(c *gin.Context, err error) {
+	var appErr *appErrors.AppError
+	if errors.As(err, &appErr) {
+		c.JSON(400, Response{
+			Code: appErr.Code,
+			Msg:  appErr.Msg,
+		})
+		return
+	}
+
+	c.JSON(500, Response{
+		Code: code.InternalError,
+		Msg:  "系统内部错误",
+	})
+}

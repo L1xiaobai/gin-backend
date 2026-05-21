@@ -23,9 +23,9 @@ func InitRedis() error {
 		DB:       	  viper.GetInt("redis.db"),
 		PoolSize:     viper.GetInt("redis.pool_size"),
 		MinIdleConns: viper.GetInt("redis.min_idle_conns"),
-		DialTimeout:  time.Duration(viper.GetInt("dial_timeout")) * time.Second,
-		ReadTimeout:  time.Duration(viper.GetInt("read_timeout")) * time.Second,
-		WriteTimeout: time.Duration(viper.GetInt("write_timeout")) * time.Second,
+		DialTimeout:  time.Duration(viper.GetInt("redis.dial_timeout")) * time.Second,
+		ReadTimeout:  time.Duration(viper.GetInt("redis.read_timeout")) * time.Second,
+		WriteTimeout: time.Duration(viper.GetInt("redis.write_timeout")) * time.Second,
 	})
 
 	ctx, cancel := context.WithTimeout(

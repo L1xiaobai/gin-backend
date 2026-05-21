@@ -53,24 +53,29 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 
 
 func (r *UserRepository) UpdateUser(ctx context.Context, user *model.User) error {
-    return r.db.WithContext(ctx).Model(&model.User{}).
-        Where("id = ?", user.ID).
-        Updates(map[string]interface{}{
-            "username": user.Username,
-            "password": user.Password,
-        }).Error
+    err := r.db.WithContext(ctx).First(&model.User{}, user.ID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return appErrors.New(code.UserNotFound, "用户不存在")
+		}
+		return appErrors.Wrap(code.DatabaseError, "查询用户失败", err)
+	}
+	return nil
 }
 
 func (r *UserRepository) ListUsers(ctx context.Context, offset, limit int) ([]*model.User, error) {
 	var users []*model.User
 	err := r.db.WithContext(ctx).Offset(offset).Limit(limit).Find(&users).Error
 	if err != nil {
-		return nil, err
+		return nil, appErrors.Wrap(code.DatabaseError, "查询用户列表失败", err)
 	}
 	return users, nil
 }
 
 
 func (r *UserRepository) DeleteUser(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&model.User{}, id).Error
+	if err := r.db.WithContext(ctx).Delete(&model.User{}, id).Error; err != nil {
+		return appErrors.Wrap(code.DatabaseError, "删除用户失败", err)
+	}
+	return nil
 }

@@ -27,3 +27,7 @@ func Wrap(code int, msg string, err error) *AppError {
 		Err:  err,
 	}
 }
+
+func (e *AppError) Unwrap() error {
+	return e.Err
+}
