@@ -22,7 +22,7 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	}
 }
 
-func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
+func (r *UserRepository) CreateUser(ctx context.Context, user *model.User) error {
 	err := r.db.WithContext(ctx).Create(user).Error
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
@@ -49,4 +49,28 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 		return nil, appErrors.Wrap(code.DatabaseError, "查询用户失败", err)
 	}
 	return &user, nil
+}
+
+
+func (r *UserRepository) UpdateUser(ctx context.Context, user *model.User) error {
+    return r.db.WithContext(ctx).Model(&model.User{}).
+        Where("id = ?", user.ID).
+        Updates(map[string]interface{}{
+            "username": user.Username,
+            "password": user.Password,
+        }).Error
+}
+
+func (r *UserRepository) ListUsers(ctx context.Context, offset, limit int) ([]*model.User, error) {
+	var users []*model.User
+	err := r.db.WithContext(ctx).Offset(offset).Limit(limit).Find(&users).Error
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+
+func (r *UserRepository) DeleteUser(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&model.User{}, id).Error
 }

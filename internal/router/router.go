@@ -24,6 +24,9 @@ func InitRouter() *gin.Engine {
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/user/register", userHandler.Register)
+		v1.POST("/user/update", userHandler.UpdateUser)
+		v1.GET("/user/list", userHandler.ListUsers)
+		v1.POST("/user/delete", userHandler.DeleteUser)
 	}
 
 	return r

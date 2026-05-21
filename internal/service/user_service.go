@@ -3,12 +3,17 @@ package service
 import (
 	"context"
 	"time"
+	"fmt"
 
 	"go-test/pkg/code"
 	appErrors "go-test/pkg/errors"
+	"go-test/pkg/db"
 	"go-test/internal/model"
 	"go-test/internal/repository"
 	"go-test/internal/global"
+	
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 type UserService struct {
@@ -31,7 +36,7 @@ func (s *UserService) Register(ctx context.Context, username, password string) e
 		Password: password,
 	}
 
-	return s.userRepo.Create(ctx, user)
+	return s.userRepo.CreateUser(ctx, user)
 }
 
 
@@ -58,16 +63,27 @@ func (s *UserService) GetUserFromCache(ctx context.Context, username string) (*m
     return &model.User{Username: val}, nil
 }
 
+
 func (s *UserService) UpdateUser(ctx context.Context, user *model.User) error {
-	// 更新数据库
-	err := s.userRepo.Update(ctx, user)
-	if err != nil {
-		return err
-	}
+    cacheKey := fmt.Sprintf("user:%s", user.Username)
 
-	// 删除redis缓存，避免脏数据
-	cacheKey := fmt.Sprintf("user:%s", user.Username)
-	_ = global.Redis.Delete(ctx, cacheKey)
+    return db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
+        return s.userRepo.UpdateUser(ctx, user)
+    }, cacheKey)
+}
 
-	return nil
+func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) ([]*model.User, error) {
+	offset := (page - 1) * pageSize
+	return s.userRepo.ListUsers(ctx, offset, pageSize)
+}
+
+
+func (s *UserService) DeleteUser(ctx context.Context, id uint) error {
+	cacheKey := fmt.Sprintf("user:%d", id)
+
+	err := db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
+		return s.userRepo.DeleteUser(ctx, id)
+	}, cacheKey)
+
+	return err
 }

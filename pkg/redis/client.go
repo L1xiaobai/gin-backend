@@ -5,7 +5,6 @@ import (
     "time"
 
     "go-test/internal/global"
-    "github.com/redis/go-redis/v9"
 )
 
 // Set 带超时写入
