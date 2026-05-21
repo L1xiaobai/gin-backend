@@ -4,6 +4,7 @@ import (
 	"runtime/debug"
 
 	"go-test/pkg/response"
+	"go-test/pkg/xcontext"
 	
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ func Recovery(logger *zap.Logger) gin.HandlerFunc {
 		defer func() {
 			if err := recover(); err != nil {
 				logger.Error("panic recovered",
+					zap.String("request_id", xcontext.GetRequestID(c.Request.Context())),
 					zap.Any("error", err),
 					zap.String("path", c.Request.URL.Path),
 					zap.String("method", c.Request.Method),

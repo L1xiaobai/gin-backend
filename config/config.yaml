@@ -14,6 +14,8 @@ mysql:
   max_idle_conns: 10
   max_open_conns: 100
   conn_max_lifetime: 3600
+  slow_threshold: 200
+  log_level: warn
 
 redis:
   host: 127.0.0.1

@@ -12,8 +12,10 @@ import (
 
 func InitRouter() *gin.Engine {
 	r := gin.New()
+	
 	r.Use(middleware.RequestID())	
 	r.Use(middleware.Logger(global.Logger))
+	r.Use(middleware.Recovery(global.Logger))
 
 	userRepo := repository.NewUserRepository(global.DB)
 	userService := service.NewUserService(userRepo)

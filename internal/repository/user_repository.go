@@ -8,6 +8,7 @@ import (
 	"go-test/internal/model"
 	appErrors "go-test/pkg/errors"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,11 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
 	err := r.db.WithContext(ctx).Create(user).Error
 	if err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return appErrors.New(code.UserExists, "用户名已存在")
+		}
+
 		return appErrors.Wrap(code.DatabaseError, "创建用户失败", err)
 	}
 	return nil

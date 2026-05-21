@@ -7,7 +7,10 @@ import (
 )
 
 func InitLogger() error {
-	l, err := zap.NewProduction()
+	cfg := zap.NewProductionConfig()
+	cfg.DisableStacktrace = true
+
+	l, err := cfg.Build()
 	if err != nil {
 		return err
 	}

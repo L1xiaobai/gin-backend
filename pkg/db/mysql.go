@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func InitMySQL() error {
@@ -21,8 +22,13 @@ func InitMySQL() error {
 		viper.GetString("mysql.database"),
 		viper.GetString("mysql.charset"),
 	)
+	// 慢sql日志
+	slowThreshold := time.Duration(viper.GetInt("mysql.slow_threshold")) * time.Millisecond
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: NewGormLogger(slowThreshold, parseGormLogLevel(viper.GetString("mysql.log_level"))),
+	})
+
 	if err != nil {
 		return err
 	}
@@ -47,4 +53,20 @@ func InitMySQL() error {
 
 	global.DB = db
 	return nil
+}
+
+
+func parseGormLogLevel(level string) gormlogger.LogLevel {
+	switch level {
+	case "silent":
+		return gormlogger.Silent
+	case "error":
+		return gormlogger.Error
+	case "warn":
+		return gormlogger.Warn
+	case "info":
+		return gormlogger.Info
+	default:
+		return gormlogger.Warn
+	}
 }
