@@ -1,23 +1,78 @@
 package redis
 
 import (
-    "context"
-    "time"
+	"context"
+	"encoding/json"
+	"time"
 
-    "go-test/internal/global"
+	"go-test/internal/global"
+	appErrors "go-test/pkg/errors"
+	"go-test/pkg/code"
+
+	"github.com/redis/go-redis/v9"
 )
 
-// Set 带超时写入
-func Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-    return global.Redis.Set(ctx, key, value, ttl).Err()
+// Set 设置字符串缓存
+func Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if err := global.Redis.Set(ctx, key, value, ttl).Err(); err != nil {
+		return appErrors.Wrap(code.RedisError, "Redis操作失败", err)
+	}
+	return nil
 }
 
-// Get 获取
+// Get 获取字符串缓存
 func Get(ctx context.Context, key string) (string, error) {
-    return global.Redis.Get(ctx, key).Result()
+	val, err := global.Redis.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", appErrors.Wrap(code.RedisError, "Redis操作失败", err)
+	}
+	return val, nil
 }
 
-// Delete 删除
-func Delete(ctx context.Context, key string) error {
-    return global.Redis.Del(ctx, key).Err()
+// Del 删除缓存
+func Del(ctx context.Context, key string) error {
+	if err := global.Redis.Del(ctx, key).Err(); err != nil {
+		return appErrors.Wrap(code.RedisError, "Redis操作失败", err)
+	}
+	return nil
+}
+
+// SetStruct 设置结构体缓存（自动序列化）
+func SetStruct(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+	b, err := json.Marshal(val)
+	if err != nil {
+		return appErrors.New(code.RedisError, "序列化失败")
+	}
+	return Set(ctx, key, b, ttl)
+}
+
+// GetStruct 获取结构体缓存（自动反序列化）
+func GetStruct(ctx context.Context, key string, out interface{}) error {
+	b, err := global.Redis.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil
+	}
+	if err != nil {
+		return appErrors.Wrap(code.RedisError, "Redis操作失败", err)
+	}
+	return json.Unmarshal(b, out)
+}
+
+// GetOrSet 获取或设置缓存
+func GetOrSet(ctx context.Context, key string, ttl time.Duration, fn func() (interface{}, error)) (interface{}, error) {
+	val, err := Get(ctx, key)
+	if val != "" && err == nil {
+		return val, nil
+	}
+	v, err := fn()
+	if err != nil {
+		return nil, err
+	}
+	if err := Set(ctx, key, v, ttl); err != nil {
+		return nil, err
+	}
+	return v, nil
 }

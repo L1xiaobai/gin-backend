@@ -11,8 +11,8 @@ import (
 	"go-test/internal/model"
 	"go-test/internal/repository"
 	"go-test/internal/global"
+	"go-test/pkg/redis"
 	
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -44,8 +44,8 @@ func (s *UserService) Register(ctx context.Context, username, password string) e
 func (s *UserService) GetUserFromCache(ctx context.Context, username string) (*model.User, error) {
     key := fmt.Sprintf("user:%s", username)
 
-    val, err := global.Redis.Get(ctx, key).Result()
-    if err == redis.Nil {
+    val, err := redis.Get(ctx, key).Result()
+    if err == nil && val == "" {
         // 缓存未命中，查询数据库
         user, err := s.userRepo.FindByUsername(ctx, username)
         if err != nil {
@@ -53,7 +53,7 @@ func (s *UserService) GetUserFromCache(ctx context.Context, username string) (*m
         }
 
         // 写回缓存，ttl 5 min
-        global.Redis.Set(ctx, key, user.Username, time.Minute*5)
+        redis.Set(ctx, key, user.Username, time.Minute*5)
         return user, nil
     } else if err != nil {
         return nil, err
