@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"time"
+	"strconv"
 
 	"go-test/internal/dto"
 	"go-test/internal/service"
@@ -70,21 +71,32 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-
 func (h *UserHandler) ListUsers(c *gin.Context) {
-	var req dto.ListUsersRequest
-	if err := validator.BindJSON(c, &req); err != nil {
-		response.Fail(c, code.InvalidParam, err.Error())
-		return
-	}
+    // 获取 GET 请求的 query 参数
+    pageStr := c.DefaultQuery("page", "1")          // 默认页码 1
+    pageSizeStr := c.DefaultQuery("page_size", "10") // 默认每页 10 条
 
-	users, err := h.userService.ListUsers(c.Request.Context(), req.Page, req.PageSize)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
+    // 转换为整数
+    page, err := strconv.Atoi(pageStr)
+    if err != nil || page < 1 {
+        response.Fail(c, code.InvalidParam, "page 参数无效")
+        return
+    }
 
-	response.Success(c, users)
+    pageSize, err := strconv.Atoi(pageSizeStr)
+    if err != nil || pageSize < 1 {
+        response.Fail(c, code.InvalidParam, "page_size 参数无效")
+        return
+    }
+
+    // 调用 service 获取用户列表
+    users, err := h.userService.ListUsers(c.Request.Context(), page, pageSize)
+    if err != nil {
+        response.Error(c, err)
+        return
+    }
+
+    response.Success(c, users)
 }
 
 

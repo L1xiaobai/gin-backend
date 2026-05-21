@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CORS GET Test</title>
+</head>
+<body>
+    <button id="testBtn">Test GET /user/list</button>
+    <pre id="result"></pre>
+
+    <script>
+    document.getElementById("testBtn").addEventListener("click", async () => {
+        const resultEl = document.getElementById("result");
+
+        // 因为浏览器不允许 GET 带 body，所以我们使用 query 参数
+        const page = 1;
+        const pageSize = 10;
+        const url = `http://127.0.0.1:8080/api/v1/user/list?page=${page}&page_size=${pageSize}`;
+
+        try {
+            const res = await fetch(url, {
+                method: "GET",
+                credentials: "include"
+            });
+            console.log("Response:", res);
+            const text = await res.text();   // 先输出原始文本
+            console.log("Raw text:", text);
+
+            try {
+                const data = JSON.parse(text);
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch(e) {
+                console.error("Failed to parse JSON:", e, text);
+            }
+        } catch (err) {
+            resultEl.textContent = "CORS GET failed: " + err;
+            console.error("CORS GET failed:", err);
+        }
+    });
+    </script>
+</body>
+</html>
