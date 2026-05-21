@@ -22,8 +22,8 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	}
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, user *model.User) error {
-	err := r.db.WithContext(ctx).Create(user).Error
+func (r *UserRepository) CreateUser(ctx context.Context,tx *gorm.DB, user *model.User) error {
+	err := tx.WithContext(ctx).Create(user).Error
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
@@ -51,6 +51,22 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 	return &user, nil
 }
 
+func (r *UserRepository) FindByID(ctx context.Context, id uint) (*model.User, error) {
+	var user model.User
+
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&user).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, appErrors.New(code.UserNotFound, "用户不存在")
+		}
+		return nil, appErrors.Wrap(code.DatabaseError, "查询用户失败", err)
+	}
+	return &user, nil
+}
+
 
 func (r *UserRepository) UpdateUser(ctx context.Context, tx *gorm.DB, user *model.User) error {
     err := tx.WithContext(ctx).Model(&model.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{"username": user.Username, "password": user.Password}).Error
@@ -58,7 +74,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, tx *gorm.DB, user *mode
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return appErrors.New(code.UserNotFound, "用户不存在")
 		}
-		return appErrors.Wrap(code.DatabaseError, "查询用户失败", err)
+		return appErrors.Wrap(code.DatabaseError, "更新用户失败", err)
 	}
 	return nil
 }
@@ -73,8 +89,8 @@ func (r *UserRepository) ListUsers(ctx context.Context, offset, limit int) ([]*m
 }
 
 
-func (r *UserRepository) DeleteUser(ctx context.Context, id uint) error {
-	if err := r.db.WithContext(ctx).Delete(&model.User{}, id).Error; err != nil {
+func (r *UserRepository) DeleteUser(ctx context.Context,tx *gorm.DB, id uint) error {
+	if err := tx.WithContext(ctx).Delete(&model.User{}, id).Error; err != nil {
 		return appErrors.Wrap(code.DatabaseError, "删除用户失败", err)
 	}
 	return nil

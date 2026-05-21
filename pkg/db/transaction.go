@@ -6,8 +6,8 @@ import (
 
 	"go-test/internal/global"
 	"go-test/pkg/xcontext"
-
-	"github.com/redis/go-redis/v9"
+	appErrors "go-test/pkg/errors"
+	"go-test/pkg/code"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -38,24 +38,33 @@ func WithTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
 
 // WithTransactionAndCache 执行事务后删除 Redis 缓存
 func WithTransactionAndCache(ctx context.Context, fn func(tx *gorm.DB) error, cacheKeys ...string) error {
-	err := WithTransaction(ctx, fn)
-	if err != nil {
-		return err
-	}
+    tx := global.DB.Begin()
+    if tx.Error != nil {
+        return appErrors.Wrap(code.DatabaseError, "事务开始失败", tx.Error)
+    }
 
-	for _, key := range cacheKeys {
-		if key == "" {
-			continue
-		}
-		if global.Redis != nil {
-			if delErr := global.Redis.Del(ctx, key).Err(); delErr != nil && delErr != redis.Nil {
-				global.Logger.Warn("redis delete failed after transaction",
-					zap.String("request_id", xcontext.GetRequestID(ctx)),
-					zap.String("key", key),
-					zap.Error(delErr),
-				)
-			}
-		}
-	}
-	return nil
+    defer func() {
+        if r := recover(); r != nil {
+            tx.Rollback()
+            global.Logger.Error("事务 panic", zap.Any("recover", r))
+            panic(r)
+        }
+    }()
+
+    if err := fn(tx); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    if err := tx.Commit().Error; err != nil {
+        return appErrors.Wrap(code.DatabaseError, "事务提交失败", err)
+    }
+
+    for _, key := range cacheKeys {
+        if key != "" {
+            _ = global.Redis.Del(ctx, key)
+        }
+    }
+
+    return nil
 }

@@ -10,7 +10,6 @@ import (
 	"go-test/pkg/db"
 	"go-test/internal/model"
 	"go-test/internal/repository"
-	"go-test/internal/global"
 	"go-test/pkg/redis"
 	
 	"gorm.io/gorm"
@@ -35,40 +34,38 @@ func (s *UserService) Register(ctx context.Context, username, password string) e
 		Username: username,
 		Password: password,
 	}
+    cacheKey := fmt.Sprintf("user:%d", user.ID)
 
-	return s.userRepo.CreateUser(ctx, user)
+	return db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
+		return s.userRepo.CreateUser(ctx, tx, user)
+	}, cacheKey)
 }
 
 
 // redis缓存查询
-func (s *UserService) GetUserFromCache(ctx context.Context, username string) (*model.User, error) {
-    key := fmt.Sprintf("user:%s", username)
-
-    val, err := redis.Get(ctx, key).Result()
-    if err == nil && val == "" {
-        // 缓存未命中，查询数据库
-        user, err := s.userRepo.FindByUsername(ctx, username)
-        if err != nil {
-            return nil, err
-        }
-
-        // 写回缓存，ttl 5 min
-        redis.Set(ctx, key, user.Username, time.Minute*5)
-        return user, nil
-    } else if err != nil {
+func (s *UserService) GetUserFromCache(ctx context.Context, userID uint) (*model.User, error) {
+    key := fmt.Sprintf("user:%d", userID)
+    var user model.User
+    if err := redis.GetStruct(ctx, key, &user); err != nil {
         return nil, err
     }
 
-    // 缓存命中，返回
-    return &model.User{Username: val}, nil
+    if user.ID == 0 {
+        dbUser, err := s.userRepo.FindByID(ctx, userID)
+        if err != nil {
+            return nil, err
+        }
+        _ = redis.SetStruct(ctx, key, dbUser, 5*time.Minute)
+        return dbUser, nil
+    }
+
+    return &user, nil
 }
 
 
 func (s *UserService) UpdateUser(ctx context.Context, user *model.User) error {
     cacheKey := fmt.Sprintf("user:%d", user.ID)
 
-	defer global.Redis.Del(ctx, fmt.Sprintf("user:%d", cacheKey))
-	
     return db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
         return s.userRepo.UpdateUser(ctx, tx, user)
     }, cacheKey)
@@ -84,8 +81,8 @@ func (s *UserService) DeleteUser(ctx context.Context, id uint) error {
 	cacheKey := fmt.Sprintf("user:%d", id)
 
 	err := db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
-		return s.userRepo.DeleteUser(ctx, id)
+		return s.userRepo.DeleteUser(ctx, tx, id)
 	}, cacheKey)
-
+	
 	return err
 }

@@ -14,6 +14,10 @@ import (
 
 // Set 设置字符串缓存
 func Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+    if key == "" {
+        return appErrors.New(code.RedisError, "Redis key 不能为空")
+    }
+
 	if err := global.Redis.Set(ctx, key, value, ttl).Err(); err != nil {
 		return appErrors.Wrap(code.RedisError, "Redis操作失败", err)
 	}
@@ -42,6 +46,10 @@ func Del(ctx context.Context, key string) error {
 
 // SetStruct 设置结构体缓存（自动序列化）
 func SetStruct(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+    if key == "" {
+        return appErrors.New(code.RedisError, "Redis key 不能为空")
+    }
+
 	b, err := json.Marshal(val)
 	if err != nil {
 		return appErrors.New(code.RedisError, "序列化失败")
