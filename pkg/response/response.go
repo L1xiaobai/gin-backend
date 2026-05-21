@@ -1,6 +1,13 @@
 package response
 
-import "github.com/gin-gonic/gin"
+import (
+	"errors"
+
+	appErrors "go-test/pkg/errors"
+	"go-test/pkg/code"
+	
+	"github.com/gin-gonic/gin"
+)
 
 type Response struct {
 	Code int         `json:"code"`

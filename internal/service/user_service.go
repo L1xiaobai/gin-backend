@@ -65,10 +65,12 @@ func (s *UserService) GetUserFromCache(ctx context.Context, username string) (*m
 
 
 func (s *UserService) UpdateUser(ctx context.Context, user *model.User) error {
-    cacheKey := fmt.Sprintf("user:%s", user.Username)
+    cacheKey := fmt.Sprintf("user:%d", user.ID)
 
+	defer global.Redis.Del(ctx, fmt.Sprintf("user:%d", cacheKey))
+	
     return db.WithTransactionAndCache(ctx, func(tx *gorm.DB) error {
-        return s.userRepo.UpdateUser(ctx, user)
+        return s.userRepo.UpdateUser(ctx, tx, user)
     }, cacheKey)
 }
 

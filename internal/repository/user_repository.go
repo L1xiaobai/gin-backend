@@ -52,8 +52,8 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 }
 
 
-func (r *UserRepository) UpdateUser(ctx context.Context, user *model.User) error {
-    err := r.db.WithContext(ctx).First(&model.User{}, user.ID).Error
+func (r *UserRepository) UpdateUser(ctx context.Context, tx *gorm.DB, user *model.User) error {
+    err := tx.WithContext(ctx).Model(&model.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{"username": user.Username, "password": user.Password}).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return appErrors.New(code.UserNotFound, "用户不存在")
