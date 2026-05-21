@@ -1,14 +1,12 @@
 package api
 
 import (
-	stderrors "errors"
 	"context"
 	"time"
 
 	"go-test/internal/dto"
 	"go-test/internal/service"
 	"go-test/internal/model"
-	appErrors "go-test/pkg/errors"
 	"go-test/pkg/code"
 	"go-test/pkg/response"
 	"go-test/pkg/validator"
@@ -39,13 +37,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 	defer cancel()
 
 	if err := h.userService.Register(ctx, req.Username, req.Password); err != nil {
-		var appErr *appErrors.AppError
-		if stderrors.As(err, &appErr) {
-			response.Fail(c, appErr.Code, appErr.Msg)
-			return
-		}
-
-		response.Fail(c, code.InternalError, "系统内部错误")
+		response.Error(c, err)
 		return
 	}
 
