@@ -32,27 +32,39 @@ func RateLimit() gin.HandlerFunc {
 		}
 
 		clientIP := c.ClientIP()
-		key := fmt.Sprintf("rate_limit:ip:%s", clientIP)
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		key := fmt.Sprintf("rate_limit:ip:%s:path:%s", clientIP, path)
 
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 
-		count, err := global.Redis.Incr(ctx, key).Result()
-		if err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusInternalServerError, 
-				response.FailData(code.RedisError, "限流服务异常"),
-			)
-			return
-		}
+		var RateLimitScript = redis.NewScript(`
+		local current = redis.call("INCR", KEYS[1])
+		if current == 1 then
+			redis.call("EXPIRE", KEYS[1], ARGV[1])
+		end
+		return current
+		`)
+		count, err := rateLimitScript.Run(
+			ctx,
+			global.Redis,
+			[]string{key},
+			windowSeconds,
+		).Int64()
 
-		if count == 1 {
-			_ = global.Redis.Expire(ctx, key, time.Duration(windowSeconds)*time.Second)
-		}
+		ttl := global.Redis.TTL(ctx, key).Val()
+
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", maxRequests))
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", maxRequests-int(count)))
+		c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", ttl/time.Second))
 
 		if count > int64(maxRequests) {
+			c.Header("Retry-After", fmt.Sprintf("%d", ttl/time.Second))
 			c.AbortWithStatusJSON(
-				http.StatusTooManyRequests, 
+				http.StatusTooManyRequests,
 				response.FailData(code.RateLimited, "请求过于频繁，请稍后再试"),
 			)
 			return
