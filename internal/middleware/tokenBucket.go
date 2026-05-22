@@ -11,6 +11,7 @@ import (
 	"go-test/pkg/code"
 	"go-test/pkg/response"
 	appConfig "go-test/pkg/config"
+	"go-test/pkg/xcontext"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -163,13 +164,17 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 
 			c.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
 
-			global.Logger.Warn("rate limit exceeded",
-				zap.String("ip", clientIP),
+			global.Logger.Warn("api rate limit exceeded",
+				zap.String("request_id", xcontext.GetRequestID(c.Request.Context())),
+				zap.String("client_ip", clientIP),
 				zap.String("path", path),
+				zap.String("method", c.Request.Method),
 				zap.Int("capacity", capacity),
 				zap.Float64("rate", rate),
-				zap.Float64("remaining", remainingFloat),
-				zap.Int("retry_after", retryAfter),
+				zap.Float64("remaining_tokens", remainingFloat),
+				zap.Int("requested_tokens", requested),
+				zap.Int("retry_after_seconds", retryAfter),
+				zap.String("user_agent", c.Request.UserAgent()),
 			)
 
 			c.AbortWithStatusJSON(
