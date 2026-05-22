@@ -27,3 +27,8 @@ redis:
   dial_timeout: 5
   read_timeout: 3
   write_timeout: 3
+
+  rate_limit:
+    enabled: true
+    window_seconds: 60
+    max_requests: 3

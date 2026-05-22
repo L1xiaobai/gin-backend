@@ -16,6 +16,7 @@ func InitRouter() *gin.Engine {
 
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())	
+	r.Use(middleware.RateLimit())
 	r.Use(middleware.Logger(global.Logger))
 	r.Use(middleware.Recovery(global.Logger))
 

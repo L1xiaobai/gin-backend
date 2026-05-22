@@ -7,5 +7,6 @@ const (
 	UserExists    = 20002
 	DatabaseError = 30001
 	RedisError    = 30002
+	RateLimited   = 40001
 	InternalError = 50000
 )
