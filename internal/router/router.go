@@ -4,6 +4,7 @@ import (
 	"go-test/internal/api"
 	"go-test/internal/global"
 	"go-test/internal/middleware"
+	appConfig "go-test/pkg/config"
 	"go-test/internal/repository"
 	"go-test/internal/service"
 
@@ -15,8 +16,9 @@ func InitRouter() *gin.Engine {
 	
 
 	r.Use(middleware.CORS())
-	r.Use(middleware.RequestID())	
-	r.Use(middleware.RateLimit())
+	r.Use(middleware.RequestID())
+	rateLimitConfig := appConfig.LoadRateLimitConfig()
+	r.Use(middleware.RateLimit(rateLimitConfig))
 	r.Use(middleware.Logger(global.Logger))
 	r.Use(middleware.Recovery(global.Logger))
 

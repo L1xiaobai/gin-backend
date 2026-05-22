@@ -30,24 +30,25 @@ redis:
 
 rate_limit:
   enabled: true
-  fail_open : true
+  fail_open: true
   algorithm: token_bucket
+
   default:
     capacity: 20
     rate: 5
-  
+
   skip_paths:
     - /api/v1/health
 
   rules:
-    /api/v1/user/register:
+    - path: /api/v1/user/register
       capacity: 10
       rate: 2
 
-    /api/v1/user/list:
+    - path: /api/v1/user/list
       capacity: 3
       rate: 0.1
 
-    /api/v1/user/delete:
+    - path: /api/v1/user/delete
       capacity: 5
       rate: 1

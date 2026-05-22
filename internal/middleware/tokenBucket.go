@@ -10,10 +10,10 @@ import (
 	"go-test/internal/global"
 	"go-test/pkg/code"
 	"go-test/pkg/response"
+	appConfig "go-test/pkg/config"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -58,9 +58,9 @@ redis.call("EXPIRE", key, ttl)
 return {allowed, remaining}
 `)
 
-func RateLimit() gin.HandlerFunc {
+func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !viper.GetBool("rate_limit.enabled") {
+		if !cfg.Enabled {
 			c.Next()
 			return
 		}
@@ -69,13 +69,16 @@ func RateLimit() gin.HandlerFunc {
 		path := c.FullPath()
 		if path == "" {
 			path = c.Request.URL.Path
-		}		
+		}
 
-		if isSkipPath(path) {
+		if cfg.IsSkipPath(path) {
 			c.Next()
 			return
 		}
-		capacity, rate := getRateLimitRule(path)
+
+		rule := cfg.GetRule(path)
+		capacity := rule.Capacity
+		rate := rule.Rate
 
 		key := fmt.Sprintf("rate_limit:token_bucket:ip:%s:path:%s", clientIP, path)
 
@@ -86,7 +89,6 @@ func RateLimit() gin.HandlerFunc {
 		requested := 1
 		refillRatePerMillisecond := rate / 1000.0
 
-		// key 的过期时间可以设置为“桶完全恢复所需时间的 2 倍”
 		ttlSeconds := int(float64(capacity)/rate*2) + 1
 		if ttlSeconds < 60 {
 			ttlSeconds = 60
@@ -104,11 +106,12 @@ func RateLimit() gin.HandlerFunc {
 		).Result()
 
 		if err != nil {
-			if viper.GetBool("rate_limit.fail_open") {
+			if cfg.FailOpen {
 				global.Logger.Error("rate limit redis error", zap.Error(err))
 				c.Next()
 				return
 			}
+
 			c.AbortWithStatusJSON(
 				http.StatusInternalServerError,
 				response.FailData(code.RedisError, "限流服务异常"),
@@ -157,7 +160,18 @@ func RateLimit() gin.HandlerFunc {
 			if retryAfter < 1 {
 				retryAfter = 1
 			}
+
 			c.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
+
+			global.Logger.Warn("rate limit exceeded",
+				zap.String("ip", clientIP),
+				zap.String("path", path),
+				zap.Int("capacity", capacity),
+				zap.Float64("rate", rate),
+				zap.Float64("remaining", remainingFloat),
+				zap.Int("retry_after", retryAfter),
+			)
+
 			c.AbortWithStatusJSON(
 				http.StatusTooManyRequests,
 				response.FailData(code.RateLimited, "请求过于频繁，请稍后再试"),
@@ -168,36 +182,3 @@ func RateLimit() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-
-func getRateLimitRule(path string) (int, float64) {
-	capacity := viper.GetInt("rate_limit.rules." + path + ".capacity")
-	rate := viper.GetFloat64("rate_limit.rules." + path + ".rate")
-
-	if capacity <= 0 {
-		capacity = viper.GetInt("rate_limit.default.capacity")
-	}
-	if rate <= 0 {
-		rate = viper.GetFloat64("rate_limit.default.rate")
-	}
-
-	if capacity <= 0 {
-		capacity = 10
-	}
-	if rate <= 0 {
-		rate = 1
-	}
-
-	return capacity, rate
-}
-
-func isSkipPath(path string) bool {
-	for _, p := range viper.GetStringSlice("rate_limit.skip_paths") {
-		if p == path {
-			return true
-		}
-	}
-	return false
-}
-
-
