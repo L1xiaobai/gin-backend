@@ -23,6 +23,9 @@ local key = KEYS[1]
 
 local capacity = tonumber(ARGV[1])
 local refill_rate = tonumber(ARGV[2])
+if refill_rate <= 0 then
+    refill_rate = 0.001
+end
 local now = tonumber(ARGV[3])
 local requested = tonumber(ARGV[4])
 local ttl = tonumber(ARGV[5])
@@ -46,17 +49,21 @@ tokens = math.min(capacity, tokens + refill)
 
 local allowed = 0
 local remaining = tokens
+local retry_after_ms = 0
 
 if tokens >= requested then
     allowed = 1
     tokens = tokens - requested
     remaining = tokens
+else
+    local missing = requested - tokens
+    retry_after_ms = math.ceil(missing / refill_rate)
 end
 
 redis.call("HMSET", key, "tokens", tokens, "timestamp", now)
 redis.call("EXPIRE", key, ttl)
 
-return {allowed, remaining}
+return {allowed, remaining, retry_after_ms}
 `)
 
 func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
@@ -121,7 +128,7 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 		}
 
 		values, ok := result.([]interface{})
-		if !ok || len(values) < 2 {
+		if !ok || len(values) < 3 {
 			c.AbortWithStatusJSON(
 				http.StatusInternalServerError,
 				response.FailData(code.InternalError, "限流结果解析失败"),
@@ -147,6 +154,15 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 			return
 		}
 
+		retryAfterMS, err := strconv.ParseInt(fmt.Sprint(values[2]), 10, 64)
+		if err != nil {
+			c.AbortWithStatusJSON(
+				http.StatusInternalServerError,
+				response.FailData(code.InternalError, "限流结果解析失败"),
+			)
+			return
+		}
+
 		remaining := int(remainingFloat)
 		if remaining < 0 {
 			remaining = 0
@@ -156,8 +172,7 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if allowed == 0 {
-			missingTokens := float64(requested) - remainingFloat
-			retryAfter := int(missingTokens/rate) + 1
+			retryAfter := int((retryAfterMS + 999) / 1000)
 			if retryAfter < 1 {
 				retryAfter = 1
 			}
