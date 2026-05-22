@@ -9,6 +9,7 @@ import (
 	"go-test/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func InitRouter() *gin.Engine {
@@ -17,8 +18,11 @@ func InitRouter() *gin.Engine {
 
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(middleware.Prometheus())
+
 	rateLimitConfig := appConfig.LoadRateLimitConfig()
 	r.Use(middleware.RateLimit(rateLimitConfig))
+
 	r.Use(middleware.Logger(global.Logger))
 	r.Use(middleware.Recovery(global.Logger))
 
@@ -26,14 +30,17 @@ func InitRouter() *gin.Engine {
 	userService := service.NewUserService(userRepo)
 	userHandler := api.NewUserHandler(userService)
 	healthHandler := api.NewHealthHandler()
+	
 
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.GET("/health", healthHandler.HealthCheck)
+	
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/user/register", userHandler.Register)
 		v1.POST("/user/update", userHandler.UpdateUser)
 		v1.GET("/user/list", userHandler.ListUsers)
 		v1.POST("/user/delete", userHandler.DeleteUser)
-		v1.GET("/health", healthHandler.HealthCheck)
 	}
 
 	return r

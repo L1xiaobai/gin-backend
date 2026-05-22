@@ -16,6 +16,7 @@ import (
 	"go-test/pkg/db"
 	"go-test/pkg/logger"
 	redisPkg "go-test/pkg/redis"
+	"go-test/pkg/metrics"
 
 	"github.com/spf13/viper"
 )
@@ -29,6 +30,8 @@ func main() {
 	}
 	defer global.Logger.Sync()
 
+	metrics.InitMetrics()
+
 	if err := db.InitMySQL(); err != nil {
 		panic(err)
 	}
@@ -36,6 +39,8 @@ func main() {
 	if err := redisPkg.InitRedis(); err != nil {
 		panic(err)
 	}
+	
+	metrics.CollectDependencyMetrics()
 
 	if err := global.DB.AutoMigrate(&model.User{}); err != nil {
 		panic(err)

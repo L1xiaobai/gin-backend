@@ -12,6 +12,7 @@ import (
 	"go-test/pkg/response"
 	appConfig "go-test/pkg/config"
 	"go-test/pkg/xcontext"
+	"go-test/pkg/metrics"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -114,6 +115,8 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 		).Result()
 
 		if err != nil {
+			metrics.RateLimitRedisErrorTotal.WithLabelValues(path).Inc()
+
 			if cfg.FailOpen {
 				global.Logger.Error("rate limit redis error", zap.Error(err))
 				c.Next()
@@ -172,6 +175,7 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if allowed == 0 {
+			metrics.RateLimitBlockedTotal.WithLabelValues(path).Inc()
 			retryAfter := int((retryAfterMS + 999) / 1000)
 			if retryAfter < 1 {
 				retryAfter = 1
@@ -188,6 +192,7 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 				zap.Float64("rate", rate),
 				zap.Float64("remaining_tokens", remainingFloat),
 				zap.Int("requested_tokens", requested),
+				zap.Int64("retry_after_ms", retryAfterMS), 
 				zap.Int("retry_after_seconds", retryAfter),
 				zap.String("user_agent", c.Request.UserAgent()),
 			)
@@ -198,7 +203,8 @@ func RateLimit(cfg appConfig.RateLimitConfig) gin.HandlerFunc {
 			)
 			return
 		}
-
+		
+		metrics.RateLimitAllowedTotal.WithLabelValues(path).Inc()
 		c.Next()
 	}
 }
