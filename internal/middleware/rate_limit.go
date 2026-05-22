@@ -64,21 +64,17 @@ func RateLimit() gin.HandlerFunc {
 			return
 		}
 
-		capacity := viper.GetInt("rate_limit.capacity")
-		rate := viper.GetFloat64("rate_limit.rate")
-
-		if capacity <= 0 {
-			capacity = 10
-		}
-		if rate <= 0 {
-			rate = 1
-		}
-
 		clientIP := c.ClientIP()
 		path := c.FullPath()
 		if path == "" {
 			path = c.Request.URL.Path
+		}		
+
+		if isSkipPath(path) {
+			c.Next()
+			return
 		}
+		capacity, rate := getRateLimitRule(path)
 
 		key := fmt.Sprintf("rate_limit:token_bucket:ip:%s:path:%s", clientIP, path)
 
@@ -107,6 +103,11 @@ func RateLimit() gin.HandlerFunc {
 		).Result()
 
 		if err != nil {
+			if viper.GetBool("rate_limit.fail_open") {
+				global.Logger.Error("rate limit redis error", zap.Error(err))
+				c.Next()
+				return
+			}
 			c.AbortWithStatusJSON(
 				http.StatusInternalServerError,
 				response.FailData(code.RedisError, "限流服务异常"),
@@ -150,11 +151,11 @@ func RateLimit() gin.HandlerFunc {
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if allowed == 0 {
-			retryAfter := int(1.0/rate) + 1
+			missingTokens := float64(requested) - remainingFloat
+			retryAfter := int(missingTokens/rate) + 1
 			if retryAfter < 1 {
 				retryAfter = 1
 			}
-
 			c.Header("Retry-After", fmt.Sprintf("%d", retryAfter))
 			c.AbortWithStatusJSON(
 				http.StatusTooManyRequests,
@@ -166,3 +167,36 @@ func RateLimit() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+
+func getRateLimitRule(path string) (int, float64) {
+	capacity := viper.GetInt("rate_limit.rules." + path + ".capacity")
+	rate := viper.GetFloat64("rate_limit.rules." + path + ".rate")
+
+	if capacity <= 0 {
+		capacity = viper.GetInt("rate_limit.default.capacity")
+	}
+	if rate <= 0 {
+		rate = viper.GetFloat64("rate_limit.default.rate")
+	}
+
+	if capacity <= 0 {
+		capacity = 10
+	}
+	if rate <= 0 {
+		rate = 1
+	}
+
+	return capacity, rate
+}
+
+func isSkipPath(path string) bool {
+	for _, p := range viper.GetStringSlice("rate_limit.skip_paths") {
+		if p == path {
+			return true
+		}
+	}
+	return false
+}
+
+
